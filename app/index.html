@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Translation Simulator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f3f6fb;color:#202b3c}
+header{background:#243b64;color:#fff;text-align:center;padding:23px 15px}
+header h1{margin:0 0 8px;font-size:clamp(23px,4vw,32px)}
+header p{margin:0;color:#dce7fa}
+main{max-width:1000px;margin:22px auto;padding:0 14px 28px}
+.panel{background:#fff;border:1px solid #dce4ef;border-radius:12px;padding:19px;margin-bottom:17px;box-shadow:0 3px 12px #15294b0b}
+h2{font-size:20px;margin:0 0 14px}
+.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+label{display:block;font-weight:bold;font-size:14px;margin-bottom:7px}
+input{width:100%;padding:10px;border:1px solid #bdcadd;border-radius:7px;font:inherit}
+.buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+button{padding:10px 15px;border-radius:7px;border:1px solid #2459a9;background:#2459a9;color:white;font-weight:bold;font-size:14px;cursor:pointer}
+button.secondary{background:#eef3fb;color:#243b64;border-color:#c9d7eb}
+button:hover{filter:brightness(.96)}
+button:disabled{opacity:.55;cursor:default;filter:none}
+canvas{width:100%;height:340px;display:block;border:1px solid #d9e2ef;border-radius:9px;background:#fbfdff}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:14px;margin-top:12px}
+.key{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+#result{padding:13px 14px;border-radius:8px;background:#eef3fb;border:1px solid #c9d7eb;margin-top:14px;line-height:1.55;white-space:pre-line}
+.formula{font-family:Consolas,monospace;background:#f6f8fc;border-radius:7px;padding:12px;line-height:1.8}
+.note{color:#637084;font-size:14px;margin-bottom:0}
+code{font-family:Consolas,monospace;background:#f6f8fc;border-radius:4px;padding:1px 5px;font-size:.92em}
+.row{display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap}
+#step{font-size:14px;color:#637084}
+#step b{color:#2459a9}
+#err{color:#c0392b;display:none;white-space:pre-wrap;font-size:14px}
+#frame{margin:12px 0 0;padding:14px;background:#fbfdff;border:1px solid #d9e2ef;border-radius:9px;
+       font-family:Consolas,monospace;font-size:13px;line-height:1.25;color:#243b64;overflow-x:auto}
+footer{text-align:center;color:#6b7789;font-size:13px;padding:8px}
+@media(max-width:650px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}canvas{height:280px}.panel{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>2D Translation Simulator</h1>
+  <p>Computer Graphics Mini Project &bull; C++ Concept Demonstration</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Enter Translation Values</h2>
+    <div class="fields">
+      <div><label for="x">Initial X</label><input id="x" type="number" value="80"></div>
+      <div><label for="y">Initial Y</label><input id="y" type="number" value="70"></div>
+      <div><label for="tx">Translation Tx</label><input id="tx" type="number" value="80"></div>
+      <div><label for="ty">Translation Ty</label><input id="ty" type="number" value="50"></div>
+    </div>
+    <div class="buttons">
+      <button id="translate">Apply Translation</button>
+      <button id="reset" class="secondary">Reset</button>
+      <button id="example" class="secondary">Load Example</button>
+    </div>
+    <p class="note">The rectangle is 100 &times; 60 units. Positive Tx moves it right; positive Ty moves it down in this screen view.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Simulation View</h2>
+    <canvas id="canvas" width="900" height="340" aria-label="Original and translated rectangles"></canvas>
+    <div class="legend">
+      <span><i class="key" style="background:#8b98ad"></i>Original position</span>
+      <span><i class="key" style="background:#2376d8"></i>Translated position</span>
+    </div>
+    <div id="result" role="status">Enter values and select &ldquo;Apply Translation&rdquo;.</div>
+  </section>
+
+  <section class="panel">
+    <h2>Formula Used</h2>
+    <div class="formula">x&prime; = x + Tx<br>y&prime; = y + Ty</div>
+    <p>Here, (x, y) are the original coordinates, (Tx, Ty) are the translation distances, and (x&prime;, y&prime;) are the new coordinates.</p>
+  </section>
+
+  <section class="panel">
+    <h2>C++ Program Output</h2>
+    <p class="note">
+      Frames below are the real output of <code>./translation_sim</code> (built from
+      <code>src/</code>), replayed step by step &mdash; simulation steps 10 to 200.
+      Regenerate with <code>make web</code>.
+    </p>
+    <div class="row">
+      <div id="step">loading output&hellip;</div>
+      <button id="toggle" type="button" disabled>Stop</button>
+    </div>
+    <pre id="frame">&hellip;</pre>
+    <div id="err"></div>
+  </section>
+
+  <footer>2D Translation Simulator &bull; C++ mini project &bull; HTML, CSS and JavaScript view</footer>
+</main>
+
+<script>
+(function () {
+  /* ---------------------------------------------------------------
+   * Translation demo: x' = x + Tx, y' = y + Ty
+   * ------------------------------------------------------------- */
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const result = document.getElementById("result");
+
+  function value(id) {
+    return Number(document.getElementById(id).value);
+  }
+
+  function draw() {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#fbfdff";
+    ctx.fillRect(0, 0, w, h);
+
+    // Coordinate grid
+    ctx.strokeStyle = "#e7edf5";
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx < w; gx += 40) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+    }
+    for (let gy = 0; gy < h; gy += 40) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+    }
+
+    const x = value("x");
+    const y = value("y");
+    const tx = value("tx");
+    const ty = value("ty");
+
+    const scale = Math.min(
+      1.1,
+      (w - 180) / Math.max(220, Math.abs(x) + Math.abs(tx) + 150),
+      (h - 100) / Math.max(180, Math.abs(y) + Math.abs(ty) + 100)
+    );
+    const s = Math.max(0.35, Math.min(1, scale));
+
+    const ox = 40 + x * s, oy = 35 + y * s;
+    const nx = 40 + (x + tx) * s, ny = 35 + (y + ty) * s;
+
+    // Axes
+    ctx.strokeStyle = "#8b98ad";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(35, 20);
+    ctx.lineTo(35, h - 18);
+    ctx.lineTo(w - 15, h - 18);
+    ctx.stroke();
+
+    // Original rectangle
+    ctx.fillStyle = "rgba(139,152,173,.16)";
+    ctx.strokeStyle = "#7b879a";
+    ctx.lineWidth = 2;
+    ctx.fillRect(ox, oy, 100 * s, 60 * s);
+    ctx.strokeRect(ox, oy, 100 * s, 60 * s);
+    ctx.fillStyle = "#56657a";
+    ctx.font = "bold 14px Arial";
+    ctx.fillText("Original", ox, Math.max(18, oy - 9));
+
+    // Translation guide
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "#2376d8";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(ox + 50 * s, oy + 30 * s);
+    ctx.lineTo(nx + 50 * s, ny + 30 * s);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Translated rectangle
+    ctx.fillStyle = "rgba(35,118,216,.17)";
+    ctx.strokeStyle = "#2376d8";
+    ctx.lineWidth = 3;
+    ctx.fillRect(nx, ny, 100 * s, 60 * s);
+    ctx.strokeRect(nx, ny, 100 * s, 60 * s);
+    ctx.fillStyle = "#185cae";
+    ctx.font = "bold 14px Arial";
+    ctx.fillText("Translated", nx, Math.max(18, ny - 9));
+
+    // Coordinate labels
+    ctx.fillStyle = "#344256";
+    ctx.font = "12px Arial";
+    ctx.fillText("Start (" + x + ", " + y + ")", ox, Math.min(h - 24, oy + 60 * s + 17));
+    ctx.fillText("New (" + (x + tx) + ", " + (y + ty) + ")", nx, Math.min(h - 8, ny + 60 * s + 17));
+  }
+
+  function apply() {
+    const ids = ["x", "y", "tx", "ty"];
+    if (ids.some(function (id) { return document.getElementById(id).value.trim() === ""; })) {
+      result.textContent = "Please fill in all four coordinate values.";
+      draw();
+      return;
+    }
+    const x = value("x");
+    const y = value("y");
+    const tx = value("tx");
+    const ty = value("ty");
+    if (![x, y, tx, ty].every(Number.isFinite)) {
+      result.textContent = "Please enter valid numbers.";
+      return;
+    }
+    result.textContent =
+      "Translation applied successfully!\n" +
+      "Original coordinates: (" + x + ", " + y + ")\n" +
+      "Translation values: Tx = " + tx + ", Ty = " + ty + "\n" +
+      "New coordinates: (" + (x + tx) + ", " + (y + ty) + ")\n" +
+      "Formula: x\u2032 = " + x + " + (" + tx + ") = " + (x + tx) +
+      "; y\u2032 = " + y + " + (" + ty + ") = " + (y + ty) + ".";
+    draw();
+  }
+
+  document.getElementById("translate").addEventListener("click", apply);
+
+  document.getElementById("reset").addEventListener("click", function () {
+    document.getElementById("x").value = 80;
+    document.getElementById("y").value = 70;
+    document.getElementById("tx").value = 0;
+    document.getElementById("ty").value = 0;
+    result.textContent = "Values reset. Click \u201cApply Translation\u201d to see the result.";
+    draw();
+  });
+
+  document.getElementById("example").addEventListener("click", function () {
+    document.getElementById("x").value = 100;
+    document.getElementById("y").value = 80;
+    document.getElementById("tx").value = 50;
+    document.getElementById("ty").value = 30;
+    apply();
+  });
+
+  ["x", "y", "tx", "ty"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", draw);
+  });
+
+  draw();
+
+  /* ---------------------------------------------------------------
+   * C++ output replay with a Stop button
+   * ------------------------------------------------------------- */
+  const frameEl = document.getElementById("frame");
+  const stepEl = document.getElementById("step");
+  const errEl = document.getElementById("err");
+  const btn = document.getElementById("toggle");
+
+  fetch("output.txt")
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status + " for output.txt");
+      return res.text();
+    })
+    .then(function (text) {
+      // Frames are blank-line-separated blocks that start with the top border.
+      const frames = text
+        .split(/\n\s*\n/)
+        .map(function (b) { return b.trim(); })
+        .filter(function (b) { return b.charAt(0) === "+" && b.indexOf("step ") !== -1; });
+
+      if (frames.length === 0) {
+        throw new Error("No frames found \u2014 run `make web` first.");
+      }
+
+      let i = 0;
+      let timer = null;
+
+      function paint() {
+        const block = frames[i];
+        frameEl.textContent = block;
+        const m = block.match(/step (\d+)/);
+        stepEl.innerHTML = "frame <b>" + (i + 1) + "</b> / " + frames.length +
+                           " &middot; " + (m ? "simulation step " + m[1] : "") +
+                           (timer === null ? " &middot; <b>paused</b>" : "");
+      }
+
+      function start() {
+        timer = setInterval(function () {
+          i = (i + 1) % frames.length;
+          paint();
+        }, 450);
+        btn.textContent = "Stop";
+        paint();
+      }
+
+      function stop() {
+        clearInterval(timer);
+        timer = null;
+        btn.textContent = "Play";
+        paint();
+      }
+
+      btn.disabled = false;
+      start();
+      btn.addEventListener("click", function () {
+        if (timer === null) start();
+        else stop();
+      });
+    })
+    .catch(function (e) {
+      stepEl.textContent = "failed to load";
+      errEl.style.display = "block";
+      errEl.textContent = String(e && e.message ? e.message : e);
+    });
+})();
+</script>
+</body>
+</html>

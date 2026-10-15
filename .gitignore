@@ -1,0 +1,5 @@
+build/
+translation_sim
+app/output.txt
+server.log
+server.pid
